@@ -24,7 +24,7 @@
 class tandberg_tdv2100_disp_logic_device : public device_t
 {
 public:
-	tandberg_tdv2100_disp_logic_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+	tandberg_tdv2100_disp_logic_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock = 0);
 
 	auto write_waitl_callback() { return m_write_waitl_cb.bind(); }
 	auto write_onlil_callback() { return m_write_onlil_cb.bind(); }
@@ -49,8 +49,6 @@ protected:
 	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
-	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
-	virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
 
 private:
 
@@ -141,7 +139,28 @@ private:
 	uint8_t m_data_kbd;
 };
 
+class tandberg_tdv2115_disp_logic_device : public tandberg_tdv2100_disp_logic_device
+{
+	public:
+		tandberg_tdv2115_disp_logic_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+
+	protected:
+		virtual ioport_constructor device_input_ports() const override ATTR_COLD;
+		virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
+};
+
+class tandberg_tdv2114_disp_logic_device : public tandberg_tdv2100_disp_logic_device
+{
+	public:
+		tandberg_tdv2114_disp_logic_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+
+	protected:
+		virtual ioport_constructor device_input_ports() const override ATTR_COLD;
+		virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
+};
+
 // device type definition
-DECLARE_DEVICE_TYPE(TANDBERG_TDV2100_DISPLAY_LOGIC, tandberg_tdv2100_disp_logic_device)
+DECLARE_DEVICE_TYPE(TANDBERG_TDV2115_DISPLAY_LOGIC, tandberg_tdv2115_disp_logic_device)
+DECLARE_DEVICE_TYPE(TANDBERG_TDV2114_DISPLAY_LOGIC, tandberg_tdv2114_disp_logic_device)
 
 #endif // MAME_TANDBERG_TDV2100_DISP_LOGIC_H

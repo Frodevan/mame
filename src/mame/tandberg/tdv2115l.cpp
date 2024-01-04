@@ -34,7 +34,7 @@ private:
 
 void tdv2115l_state::tdv2115l(machine_config& config)
 {
-	TANDBERG_TDV2100_DISPLAY_LOGIC(config, m_terminal);
+	TANDBERG_TDV2115_DISPLAY_LOGIC(config, m_terminal);
 	m_terminal->write_waitl_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::waitl_w));
 	m_terminal->write_onlil_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::onlil_w));
 	m_terminal->write_carl_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::carl_w));

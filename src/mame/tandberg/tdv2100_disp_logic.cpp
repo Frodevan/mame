@@ -91,10 +91,11 @@
 static constexpr XTAL DOT_CLOCK = XTAL(20'275'200);
 static constexpr XTAL DOT_CLOCK_3 = DOT_CLOCK/3;
 
-DEFINE_DEVICE_TYPE(TANDBERG_TDV2100_DISPLAY_LOGIC, tandberg_tdv2100_disp_logic_device, "tandberg_tdv2100_disp_logic", "Tandberg TDV-2100 series Display Logic terminal module");
+DEFINE_DEVICE_TYPE(TANDBERG_TDV2115_DISPLAY_LOGIC, tandberg_tdv2115_disp_logic_device, "tandberg_tdv2115_disp_logic", "Tandberg TDV-2100 series Display Logic terminal module for Standalone operation");
+DEFINE_DEVICE_TYPE(TANDBERG_TDV2114_DISPLAY_LOGIC, tandberg_tdv2114_disp_logic_device, "tandberg_tdv2114_disp_logic", "Tandberg TDV-2100 series Display Logic terminal module for Computer operation");
 
-tandberg_tdv2100_disp_logic_device::tandberg_tdv2100_disp_logic_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock):
-	device_t(mconfig, TANDBERG_TDV2100_DISPLAY_LOGIC, tag, owner, clock),
+tandberg_tdv2100_disp_logic_device::tandberg_tdv2100_disp_logic_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock):
+	device_t(mconfig, type, tag, owner, clock),
 	m_screen(*this, "screen"),
 	m_palette(*this, "palette"),
 	m_font(*this, "display_font_rom"),
@@ -1086,10 +1087,109 @@ static INPUT_PORTS_START( tdv2115l )
 
 INPUT_PORTS_END
 
-ioport_constructor tandberg_tdv2100_disp_logic_device::device_input_ports() const
-{
-	return INPUT_PORTS_NAME( tdv2115l );
-}
+static INPUT_PORTS_START( tdv2114 )
+
+	PORT_START("sw_invert_video")
+		PORT_CONFNAME(0x1, 0x1, "INVERSE VIDEO")
+			PORT_CONFSETTING(0x1, DEF_STR( Off ))
+			PORT_CONFSETTING(0x0, DEF_STR( On ))
+
+	PORT_START("sw_rs232_baud")
+		PORT_CONFNAME(0x7, 0x6, "SPEED SELECT [Note: Baud-rate]")                                PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_disp_logic_device::uart_changed), 0)
+			PORT_CONFSETTING(0x0, "0: 110")
+			PORT_CONFSETTING(0x1, "1: 300")
+			PORT_CONFSETTING(0x2, "2: 600")
+			PORT_CONFSETTING(0x3, "3: 1200")
+			PORT_CONFSETTING(0x4, "4: 2400")
+			PORT_CONFSETTING(0x5, "5: 4800")
+			PORT_CONFSETTING(0x6, "6: 9600")
+			PORT_CONFSETTING(0x7, "7: 19200")
+
+	PORT_START("sw_rs232_settings")
+		PORT_CONFNAME(0x01, 0x01, "RS-232 Parity checking")                                     PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_disp_logic_device::uart_changed), 0)   // NO PARITY [YES/NO]
+			PORT_CONFSETTING(0x01, DEF_STR( Off ))
+			PORT_CONFSETTING(0x00, DEF_STR( On ))
+		PORT_CONFNAME(0x02, 0x02, "RS-232 Parity type")                                         PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_disp_logic_device::uart_changed), 0)   // EVEN PARITY [NO/YES]
+			PORT_CONFSETTING(0x00, "Odd")
+			PORT_CONFSETTING(0x02, "Even")
+		PORT_CONFNAME(0x04, 0x04, "RS-232 Number of stop bits")                                 PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_disp_logic_device::uart_changed), 0)   // TWO STOP BITS [NO/YES]
+			PORT_CONFSETTING(0x00, "One")
+			PORT_CONFSETTING(0x04, "Two")
+		PORT_CONFNAME(0x08, 0x08, "RS-232 Internal local echo when on-line (for half duplex)")  PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_disp_logic_device::rs232_changed), 0)  // EXT. ECHO [YES/NO]
+			PORT_CONFSETTING(0x08, DEF_STR( Off ))
+			PORT_CONFSETTING(0x00, DEF_STR( On ))
+
+	PORT_START("dsw_u39")
+		PORT_DIPNAME(0x003, 0x001, "ACK/NACK/ENQUIRY lamps")
+			PORT_DIPSETTING(0x001, "Reset with CLEAR key")                      // 1: OFF 2: ON
+			PORT_DIPSETTING(0x002, "Reset with SYN ctrl-char (^V)")             // 1: ON  2: OFF
+		PORT_DIPNAME(0x00c, 0x004, "Rx handshake source")                                       PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_disp_logic_device::rs232_changed), 0)
+			PORT_DIPSETTING(0x004, "DSR")                                       // 3: OFF 4: ON
+			PORT_DIPSETTING(0x008, "DCD")                                       // 3: ON  4: Off
+		PORT_DIPNAME(0x010, 0x000, "Operating mode")
+			PORT_DIPSETTING(0x010, "TTY mode (no CPU)")                         // 5: OFF
+			PORT_DIPSETTING(0x000, "CPU mode (CPU module required)")            // 5: ON
+		PORT_DIPNAME(0x020, 0x020, "DTR/RTS signals")                                           PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_disp_logic_device::rs232_lock_changed), 0)
+			PORT_DIPSETTING(0x020, "Affected by LINE/TRANS keys")               // 6: OFF
+			PORT_DIPSETTING(0x000, "Permanently asserted")                      // 6: ON
+		PORT_DIPNAME(0x0c0, 0x040, "ON LINE lamp lit when")                                     PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_disp_logic_device::rs232_changed), 0)
+			PORT_DIPSETTING(0x040, "Only if both RTS and CTS")                  // 7: OFF 8: ON
+			PORT_DIPSETTING(0x080, "RTS regardless of CTS")                     // 7: ON  8: OFF
+		PORT_DIPNAME(0x100, 0x000, "Automatic page-roll after end of page")
+			PORT_DIPSETTING(0x100, DEF_STR( Off ))                              // 9: OFF
+			PORT_DIPSETTING(0x000, DEF_STR( On ))                               // 9: ON
+		PORT_DIPNAME(0x200, 0x000, "RS-232 data length")                                        PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_disp_logic_device::uart_changed), 0)
+			PORT_DIPSETTING(0x200, "8 data bits")                               // 10: OFF
+			PORT_DIPSETTING(0x000, "7 data bits")                               // 10: ON
+
+	PORT_START("dsw_u73")
+		PORT_DIPNAME(0x3, 0x1, "Automatic RTS with DTR")
+			PORT_DIPSETTING(0x1, DEF_STR( Off ))                                // 1: OFF 2: ON
+			PORT_DIPSETTING(0x2, DEF_STR( On ))                                 // 1: ON  2: OFF
+		PORT_DIPNAME(0xc, 0x8, "Current-Loop RxD line (Unused)")
+			PORT_DIPSETTING(0x4, "10V zener-diode in series")                   // 3: OFF 4: ON
+			PORT_DIPSETTING(0x8, "47 Ohm series resistor")                      // 3: ON  4: OFF
+
+	PORT_START("dsw_u61")
+		PORT_DIPNAME(0x003, 0x001, "Horizontal space between chars")
+			PORT_DIPSETTING(0x001, "Duplicate edge of previous char")           // 1: OFF 2: ON
+			PORT_DIPSETTING(0x002, "Draw gap")                                  // 1: ON  2: OFF
+		PORT_DIPNAME(0x004, 0x004, "Automatic CR+LF after end of line")
+			PORT_DIPSETTING(0x000, DEF_STR( Off ))                              // 3: ON
+			PORT_DIPSETTING(0x004, DEF_STR( On ))                               // 3: OFF
+		PORT_DIPNAME(0x008, 0x000, "Display mode")
+			PORT_DIPSETTING(0x008, "Undeline mode")                             // 4: OFF
+			PORT_DIPSETTING(0x000, "Attribute mode")                            // 4: ON
+		PORT_DIPNAME(0x030, 0x020, "Cursor blinking")
+			PORT_DIPSETTING(0x010, DEF_STR( Off ))                              // 5: OFF 6: ON
+			PORT_DIPSETTING(0x020, DEF_STR( On ))                               // 5: ON  6: OFF
+		PORT_DIPNAME(0x040, 0x000, "Hide Attribute-changes or Underlined chars")
+			PORT_DIPSETTING(0x040, DEF_STR( Off ))                              // 7: OFF
+			PORT_DIPSETTING(0x000, DEF_STR( On ))                               // 7: ON
+		PORT_DIPNAME(0x080, 0x080, DEF_STR( Unused ))
+			PORT_DIPSETTING(0x080, DEF_STR( Off ))                              // 8: OFF
+			PORT_DIPSETTING(0x000, DEF_STR( On ))                               // 8: ON
+		PORT_DIPNAME(0x100, 0x000, "Hide ASCII control characters")
+			PORT_DIPSETTING(0x100, DEF_STR( Off ))                              // 9: OFF
+			PORT_DIPSETTING(0x000, DEF_STR( On ))                               // 9: ON
+			// NOTE: These characters can only be written to display memory by the CPU module.
+			//       Then to display these characters, a 4th font ROM will also be needed.
+		PORT_DIPNAME(0x200, 0x000, "Cursor shape")
+			PORT_DIPSETTING(0x200, "Block")                                     // 10: OFF
+			PORT_DIPSETTING(0x000, "Line")                                      // 10: ON
+
+INPUT_PORTS_END
+
+ROM_START(tdv2114)
+	ROM_REGION( 0x0800, "display_font_rom", ROMREGION_ERASEFF )
+	ROM_LOAD( "960922-1 1.82s141.u18", 0x0200, 0x0200, CRC(002856d2) SHA1(d86afc7190163b3c0d7a43516adb14046b978a4f))
+	ROM_LOAD( "960922-1 2.82s141.u19", 0x0400, 0x0200, CRC(75e33fda) SHA1(a7d3e1507a0e5fc0b5c4b4d65d2d66dd16fb5018))
+	ROM_LOAD( "960922-1 3.82s141.u20", 0x0600, 0x0200, CRC(7eb8c672) SHA1(6c517e282042fe38119ef1c45d1ebb67bc58fafe))
+
+	ROM_REGION( 0x40, "row_addr_offsets", ROMREGION_ERASEFF )
+	ROM_LOAD( "prom.82s123.u23", 0x00, 0x20, CRC(b92bfa61) SHA1(3af8108269a0504268ebb8d5bb6ae235d811460c))
+	ROM_LOAD( "prom.82s123.u24", 0x20, 0x20, CRC(a64d8378) SHA1(014d524d977927c140237c47e8ba692c1a89397a))
+ROM_END
 
 ROM_START(tdv2115l)
 	ROM_REGION( 0x0800, "display_font_rom", ROMREGION_ERASEFF )
@@ -1102,7 +1202,30 @@ ROM_START(tdv2115l)
 	ROM_LOAD( "prom.82s123.u24", 0x20, 0x20, CRC(a64d8378) SHA1(014d524d977927c140237c47e8ba692c1a89397a))
 ROM_END
 
-const tiny_rom_entry *tandberg_tdv2100_disp_logic_device::device_rom_region() const
+tandberg_tdv2115_disp_logic_device::tandberg_tdv2115_disp_logic_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock):
+	tandberg_tdv2100_disp_logic_device(mconfig, TANDBERG_TDV2115_DISPLAY_LOGIC, tag, owner, clock)
+{}
+
+ioport_constructor tandberg_tdv2115_disp_logic_device::device_input_ports() const
+{
+	return INPUT_PORTS_NAME(tdv2115l);
+}
+
+const tiny_rom_entry *tandberg_tdv2115_disp_logic_device::device_rom_region() const
 {
 	return ROM_NAME(tdv2115l);
+}
+
+tandberg_tdv2114_disp_logic_device::tandberg_tdv2114_disp_logic_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock):
+	tandberg_tdv2100_disp_logic_device(mconfig, TANDBERG_TDV2114_DISPLAY_LOGIC, tag, owner, clock)
+{}
+
+ioport_constructor tandberg_tdv2114_disp_logic_device::device_input_ports() const
+{
+	return INPUT_PORTS_NAME(tdv2114);
+}
+
+const tiny_rom_entry *tandberg_tdv2114_disp_logic_device::device_rom_region() const
+{
+	return ROM_NAME(tdv2114);
 }
