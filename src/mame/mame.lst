@@ -44080,6 +44080,10 @@ wgpu                            // C32 (c) 1989 Taito America Corporation (US)
 wyvernf0                        // A39 (c) 1985 Taito Corporation (Japan)
 wyvernf0a                       // A39 (c) 1985 Taito Corporation (Japan)
 
+@source:tandberg/tdv2114.cpp
+tdv2114                         //
+tdv2124                         //
+
 @source:tandberg/tdv2115l.cpp
 tdv2115l                        //
 
