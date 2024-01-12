@@ -51,6 +51,8 @@ void tdv2114_state::tdv2114(machine_config& config)
 	m_terminal->write_enql_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::enql_w));
 	m_terminal->write_ackl_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::ackl_w));
 	m_terminal->write_nakl_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::nakl_w));
+	m_terminal->write_vsync_int_callback().set(m_cpu, FUNC(tandberg_tdv2100_cpu_device::ireq_1_w));
+	m_terminal->write_general_int_callback().set(m_cpu, FUNC(tandberg_tdv2100_cpu_device::ireq_3_w));
 
 	TANDBERG_TDV2100_KEYBOARD(config, m_keyboard);
 	m_keyboard->write_kstr_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::process_keyboard_char));
@@ -60,6 +62,18 @@ void tdv2114_state::tdv2114(machine_config& config)
 	m_keyboard->write_break_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::break_w));
 
 	TANDBERG_TDV2114_CPU(config, m_cpu);
+	m_cpu->write_iack_1_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::ack_vsync_int_w));
+	m_cpu->write_iack_3_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::ack_general_int_w));
+	m_cpu->write_io_port_e4_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::transmit_cpu_data));
+	m_cpu->write_io_port_e5_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::process_cpu_char));
+	m_cpu->write_io_port_e6_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::process_cpu_data));
+	m_cpu->write_io_port_e7_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::handle_cpu_command));
+	m_cpu->read_io_port_e4().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_received_data));
+	m_cpu->read_io_port_e5().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_char_data));
+	m_cpu->read_io_port_e6().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_keyboard_data));
+	m_cpu->read_io_port_e7().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_terminal_status));
+	m_cpu->read_io_port_f6().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_interrupt_status));
+	m_cpu->read_io_port_f7().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_uart_status));
 }
 
 void tdv2114_state::tdv2124(machine_config& config)
@@ -72,6 +86,8 @@ void tdv2114_state::tdv2124(machine_config& config)
 	m_terminal->write_enql_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::enql_w));
 	m_terminal->write_ackl_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::ackl_w));
 	m_terminal->write_nakl_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::nakl_w));
+	m_terminal->write_vsync_int_callback().set(m_cpu, FUNC(tandberg_tdv2100_cpu_device::ireq_1_w));
+	m_terminal->write_general_int_callback().set(m_cpu, FUNC(tandberg_tdv2100_cpu_device::ireq_3_w));
 
 	TANDBERG_TDV2100_KEYBOARD(config, m_keyboard);
 	m_keyboard->write_kstr_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::process_keyboard_char));
@@ -81,6 +97,18 @@ void tdv2114_state::tdv2124(machine_config& config)
 	m_keyboard->write_break_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::break_w));
 
 	TANDBERG_TDV2124_CPU(config, m_cpu);
+	m_cpu->write_iack_1_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::ack_vsync_int_w));
+	m_cpu->write_iack_3_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::ack_general_int_w));
+	m_cpu->write_io_port_e4_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::transmit_cpu_data));
+	m_cpu->write_io_port_e5_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::process_cpu_char));
+	m_cpu->write_io_port_e6_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::process_cpu_data));
+	m_cpu->write_io_port_e7_callback().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::handle_cpu_command));
+	m_cpu->read_io_port_e4().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_received_data));
+	m_cpu->read_io_port_e5().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_char_data));
+	m_cpu->read_io_port_e6().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_keyboard_data));
+	m_cpu->read_io_port_e7().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_terminal_status));
+	m_cpu->read_io_port_f6().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_interrupt_status));
+	m_cpu->read_io_port_f7().set(m_terminal, FUNC(tandberg_tdv2100_disp_logic_device::get_uart_status));
 }
 
 static INPUT_PORTS_START( tdv2115l )

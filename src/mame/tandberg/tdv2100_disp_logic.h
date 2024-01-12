@@ -21,6 +21,8 @@
 #include "screen.h"
 #include "speaker.h"
 
+static constexpr XTAL DOT_CLOCK = XTAL(20'275'200);
+
 class tandberg_tdv2100_disp_logic_device : public device_t
 {
 public:
@@ -34,16 +36,33 @@ public:
 	auto write_ackl_callback() { return m_write_ackl_cb.bind(); }
 	auto write_nakl_callback() { return m_write_nakl_cb.bind(); }
 
+	auto write_vsync_int_callback() { return m_write_vsync_int_cb.bind(); }
+	auto write_general_int_callback() { return m_write_general_int_cb.bind(); }
+
 	DECLARE_INPUT_CHANGED_MEMBER(rs232_changed);
 	DECLARE_INPUT_CHANGED_MEMBER(rs232_lock_changed);
 	DECLARE_INPUT_CHANGED_MEMBER(uart_changed);
 
-	// Input strobes
-	void process_keyboard_char(uint8_t key);
+	// Input strobes Keyboard
 	void cleark_w(int state);
 	void linek_w(int state);
 	void transk_w(int state);
 	void break_w(int state);
+	void process_keyboard_char(uint8_t key);
+
+	// IO strobes CPU
+	void ack_vsync_int_w(uint8_t state);
+	void ack_general_int_w(uint8_t state);
+	void transmit_cpu_data(uint8_t data);
+	void process_cpu_char(uint8_t data);
+	void process_cpu_data(uint8_t data);
+	void handle_cpu_command(uint8_t data);
+	uint8_t get_received_data();
+	uint8_t get_char_data();
+	uint8_t get_keyboard_data();
+	uint8_t get_terminal_status();
+	uint8_t get_interrupt_status();
+	uint8_t get_uart_status();
 
 protected:
 	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
@@ -67,6 +86,9 @@ private:
 	TIMER_CALLBACK_MEMBER(expire_speed_check);
 	TIMER_CALLBACK_MEMBER(end_beep);
 
+	// CPU interface
+	void update_interrupt_reg(uint8_t mask, uint8_t state);
+
 	// RS-232
 	void rs232_rxd_w(int state);
 	void rs232_txd_w(int state);
@@ -77,10 +99,11 @@ private:
 	void rs232_ri_w(int state);
 	void uart_rx(int state);
 	void uart_tx(int state);
+	void set_tx_int_enable(bool state);
 	void update_rs232_lamps();
 	void check_rs232_rx_error(int state);
 	void set_uart_state_from_switches();
-	void clock_on_line_flip_flop();
+	void clock_on_line_flip_flop(bool cpu_source = false);
 	void clock_transmit_flip_flop();
 
 	required_device<screen_device>      m_screen;
@@ -106,6 +129,9 @@ private:
 	devcb_write_line                    m_write_enql_cb;
 	devcb_write_line                    m_write_ackl_cb;
 	devcb_write_line                    m_write_nakl_cb;
+	
+	devcb_write_line                    m_write_vsync_int_cb;
+	devcb_write_line                    m_write_general_int_cb;
 
 	// Video, Cursor & Sound
 	uint8_t m_frame_counter;
@@ -124,11 +150,17 @@ private:
 	emu_timer *m_beep_trigger;
 	emu_timer *m_speed_ctrl;
 
+	// CPU interface
+	uint8_t m_interrupt_status;
+	bool m_tx_int_enabled;
+
 	// RS-232
 	bool m_data_terminal_ready;
 	bool m_request_to_send;
 	bool m_rx_handshake;
 	bool m_tx_handshake;
+	bool m_call_indicator;
+	bool m_carrier_indicator;
 
 	// Keyboard
 	bool m_clear_key_held;
