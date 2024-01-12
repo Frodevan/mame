@@ -11,12 +11,7 @@
 	Input stobes:
 
 	    * Interrupt 1
-	    * Interrupt 2
 	    * Interrupt 3
-	    * Interrupt 4
-	    * Interrupt 5
-	    * Interrupt 6
-	    * Interrupt 7
 
 	Output strobes:
 
@@ -34,27 +29,43 @@
 
 	TODO:
 
-		* Add CPU
-		* Add RAM/ROM
-	    * Add Display CPU interface and strobes
-	    * Add Interrupts
-		* Add expansion bus
+	    * Add expansion bus
+	    * Add DMA
+	    * Add CPU Printer UART
 
 ****************************************************************************/
 
 #include "emu.h"
+#include "cpu/i8085/i8085.h"
 #include "tdv2100_cpu.h"
+#include "tdv2100_disp_logic.h"
+
+static constexpr XTAL CPU_CLOCK = DOT_CLOCK/10;
 
 DEFINE_DEVICE_TYPE(TANDBERG_TDV2114_CPU, tandberg_tdv2114_cpu_device, "tandberg_tdv2114_cpu", "Tandberg TDV-2100 series CPU card with XMON/D rev.5 ROM");
 DEFINE_DEVICE_TYPE(TANDBERG_TDV2124_CPU, tandberg_tdv2124_cpu_device, "tandberg_tdv2124_cpu", "Tandberg TDV-2100 series CPU card with XMON/F rev.3 ROM");
 
 tandberg_tdv2100_cpu_device::tandberg_tdv2100_cpu_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock):
 	device_t(mconfig, type, tag, owner, clock),
+	m_cpu(*this, "processor"),
 	m_rom(*this, "kernel_rom"),
-	m_ram(*this, "work_ram", 0x800, ENDIANNESS_LITTLE),
+	m_ram(*this, RAM_TAG),
+	m_cpu_mem_view(*this, "mem_view"),
 	m_uart(*this, "uart"),
 	m_uart_clock(*this, "uart_clock"),
-	m_rs232(*this, "serial")
+	m_rs232(*this, "serial"),
+	m_write_iack_1_cb(*this),
+	m_write_iack_3_cb(*this),
+	m_write_io_port_e4_cb(*this),
+	m_write_io_port_e5_cb(*this),
+	m_write_io_port_e6_cb(*this),
+	m_write_io_port_e7_cb(*this),
+	m_read_io_port_e4(*this, 0xff),
+	m_read_io_port_e5(*this, 0xff),
+	m_read_io_port_e6(*this, 0xff),
+	m_read_io_port_e7(*this, 0xff),
+	m_read_io_port_f6(*this, 0xff),
+	m_read_io_port_f7(*this, 0xff)
 {}
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -64,10 +75,189 @@ tandberg_tdv2100_cpu_device::tandberg_tdv2100_cpu_device(const machine_config &m
 
 void tandberg_tdv2100_cpu_device::device_start()
 {
+	save_item(NAME(m_ireq_state));
 }
 
 void tandberg_tdv2100_cpu_device::device_reset()
 {
+	m_ireq_state = 0x00;
+	m_cpu_mem_view.select(0);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+//
+// CPU state
+//
+
+void tandberg_tdv2100_cpu_device::tdv2100_mem(address_map &map)
+{
+	map(0x0000, 0x2fff).view(m_cpu_mem_view);
+	m_cpu_mem_view[0](0x0000, 0x1fff).rom().region("kernel_rom", 0);
+	m_cpu_mem_view[0](0x2000, 0x27ff).rw(m_ram, FUNC(ram_device::read), FUNC(ram_device::write));
+	// TODO: 0x2800-0x2fff goes to optional redefinable character expansion for terminal module
+	// TODO: Map expansion bus
+	//     m_cpu_mem_view[0](0x3000, 0xffff).rw(m_exp, FUNC(ram_device::read), FUNC(ram_device::write));
+	//     m_cpu_mem_view[1](0x0000, 0xffff).rw(m_exp, FUNC(ram_device::read), FUNC(ram_device::write));
+}
+
+void tandberg_tdv2100_cpu_device::tdv2100_io(address_map &map)
+{
+	map.unmap_value_high();
+	map(0x00, 0xff).rw(FUNC(tandberg_tdv2100_cpu_device::io_r), FUNC(tandberg_tdv2100_cpu_device::io_w));
+	// TODO: Map expansion bus
+}
+
+uint8_t tandberg_tdv2100_cpu_device::io_r(offs_t addr)
+{
+	switch(addr)
+	{
+		case 0xe4:
+			return m_read_io_port_e4();
+
+		case 0xe5:
+			return m_read_io_port_e5();
+
+		case 0xe6:
+			return m_read_io_port_e6();
+
+		case 0xe7:
+			return m_read_io_port_e7();
+
+		case 0xf4:
+			// Todo: CPU module UART
+			return 0xff;
+
+		case 0xf5:
+			// Todo: CPU module UART
+			return 0xff;
+
+		case 0xf6:
+			return m_read_io_port_f6();
+
+		case 0xf7:
+			return m_read_io_port_f7();
+
+		default:
+			break;
+	}
+	return 0xff;
+}
+
+void tandberg_tdv2100_cpu_device::io_w(offs_t addr, uint8_t data)
+{
+	switch(addr)
+	{
+		case 0xe4:
+			m_write_io_port_e4_cb(data);
+			return;
+
+		case 0xe5:
+			m_write_io_port_e5_cb(data);
+			return;
+
+		case 0xe6:
+			m_write_io_port_e6_cb(data);
+			return;
+
+		case 0xe7:
+			m_write_io_port_e7_cb(data);
+			return;
+
+		case 0xf4:
+			// Todo: CPU module UART
+			return;
+
+		case 0xf5:
+		case 0xf6:
+			return; // Note: Reserved for bodge-wire patches
+
+		case 0xf7:
+			// TODO: If CP/M patch installed
+			//     m_cpu_mem_view.select(1);
+			return;
+
+		default:
+			break;
+	}
+	// Todo: Invoke io on expansion bus
+}
+
+///////////////////////////////////////////////////////////////////////////////
+//
+// Interrupts
+//
+
+void tandberg_tdv2100_cpu_device::ireq_1_w(uint8_t state)
+{
+	ireq_change(0x02, state);
+}
+
+void tandberg_tdv2100_cpu_device::ireq_3_w(uint8_t state)
+{
+	ireq_change(0x08, state);
+}
+
+void tandberg_tdv2100_cpu_device::ireq_change(uint8_t mask, uint8_t state)
+{
+	// Note: IREQ lines are initially active negative, but inverted by the encoder
+	m_ireq_state = (m_ireq_state&~(mask))|((state)? 0x00 : mask);
+
+	if(m_ireq_state)
+	{
+		m_cpu->set_input_line(0, ASSERT_LINE);
+	}
+	else
+	{
+		m_cpu->set_input_line(0, CLEAR_LINE);
+	}
+}
+
+IRQ_CALLBACK_MEMBER( tandberg_tdv2100_cpu_device::inta_cb )
+{
+	// Note: IACK lines are active negative, for clearing IREQ latches on other modules
+	if(m_ireq_state&0x02)
+	{
+		m_write_iack_1_cb(0);
+		m_write_iack_1_cb(1);
+		return 0xc7 | 0x08;
+	}
+	else if(m_ireq_state&0x04)
+	{
+		//m_write_iack_2_cb(0);
+		//m_write_iack_2_cb(1);
+		return 0xc7 | 0x10;
+	}
+	else if(m_ireq_state&0x08)
+	{
+		m_write_iack_3_cb(0);
+		m_write_iack_3_cb(1);
+		return 0xc7 | 0x18;
+	}
+	else if(m_ireq_state&0x10)
+	{
+		//m_write_iack_4_cb(0);
+		//m_write_iack_4_cb(1);
+		return 0xc7 | 0x20;
+	}
+	else if(m_ireq_state&0x20)
+	{
+		//m_write_iack_5_cb(0);
+		//m_write_iack_5_cb(1);
+		return 0xc7 | 0x28;
+	}
+	else if(m_ireq_state&0x40)
+	{
+		//m_write_iack_6_cb(0);
+		//m_write_iack_6_cb(1);
+		return 0xc7 | 0x30;
+	}
+	else if(m_ireq_state&0x80)
+	{
+		//m_write_iack_7_cb(0);
+		//m_write_iack_7_cb(1);
+		return 0xc7 | 0x38;
+	}
+	return 0xc7;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -82,6 +272,7 @@ INPUT_CHANGED_MEMBER(tandberg_tdv2100_cpu_device::uart_changed)
 
 void tandberg_tdv2100_cpu_device::set_uart_state_from_switches()
 {
+	
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -91,6 +282,13 @@ void tandberg_tdv2100_cpu_device::set_uart_state_from_switches()
 
 void tandberg_tdv2100_cpu_device::device_add_mconfig(machine_config &mconfig)
 {
+	I8080(mconfig, m_cpu, CPU_CLOCK);
+	m_cpu->set_addrmap(AS_PROGRAM, &tandberg_tdv2100_cpu_device::tdv2100_mem);
+	m_cpu->set_addrmap(AS_IO, &tandberg_tdv2100_cpu_device::tdv2100_io);
+	m_cpu->set_irq_acknowledge_callback(FUNC(tandberg_tdv2100_cpu_device::inta_cb));
+
+	RAM(mconfig, m_ram).set_default_size("2K").set_default_value(0xff);
+
 	RS232_PORT(mconfig, m_rs232, default_rs232_devices, nullptr);
 	//m_rs232->rxd_handler().set(FUNC(tandberg_tdv2100_disp_logic_device::rs232_rxd_w));
 	//m_rs232->dcd_handler().set(FUNC(tandberg_tdv2100_disp_logic_device::rs232_dcd_w));

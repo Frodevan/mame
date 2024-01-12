@@ -48,6 +48,8 @@
     Input stobes:
 
           Function:                         Hook:
+        * Vsync strobe acknowledge          CPU module, Interrupt 1 ack
+        * General strobe acknowledge        CPU module, Interrupt 3 ack
         * Get Rx char from UART             CPU module, IO E4 Read
         * Send Tx data to UART              CPU module, IO E4 Write
         * Get data from local at cursor++   CPU module, IO E5 Read
@@ -68,7 +70,7 @@
 
           Function:                         Hook:
         * VSync                             CPU module, Interrupt 1
-        * State change                      CPU module, Interrupt 3
+        * General state change              CPU module, Interrupt 3
         * WAIT lamp                         Keyboard, WAIT indicator
         * ON LINE lamp                      Keyboard, ON LINE indicator
         * CARRIER lamp                      Keyboard, CARRIER indicator
@@ -77,18 +79,11 @@
         * ACK lamp                          Keyboard, ACK indicator
         * NAK lamp                          Keyboard, NAK indicator
 
-
-    TODO:
-
-        * Add CPU interface and strobes
-        * Add CPU interrupts
-
 ****************************************************************************/
 
 #include "emu.h"
 #include "tdv2100_disp_logic.h"
 
-static constexpr XTAL DOT_CLOCK = XTAL(20'275'200);
 static constexpr XTAL DOT_CLOCK_3 = DOT_CLOCK/3;
 
 DEFINE_DEVICE_TYPE(TANDBERG_TDV2115_DISPLAY_LOGIC, tandberg_tdv2115_disp_logic_device, "tandberg_tdv2115_disp_logic", "Tandberg TDV-2100 series Display Logic terminal module for Standalone operation");
@@ -118,11 +113,14 @@ tandberg_tdv2100_disp_logic_device::tandberg_tdv2100_disp_logic_device(const mac
 	m_write_enql_cb(*this),
 	m_write_ackl_cb(*this),
 	m_write_nakl_cb(*this),
+	m_write_vsync_int_cb(*this),
+	m_write_general_int_cb(*this),
 	m_vblank_state(false),
 	m_speed_check(false),
 	m_attribute(0),
 	m_char_max_row(0),
 	m_char_max_col(0),
+	m_interrupt_status(0),
 	m_rx_handshake(false),
 	m_tx_handshake(false),
 	m_clear_key_held(false),
@@ -151,8 +149,12 @@ void tandberg_tdv2100_disp_logic_device::device_start()
 	save_item(NAME(m_speed_check));
 	save_item(NAME(m_data_terminal_ready));
 	save_item(NAME(m_request_to_send));
+	save_item(NAME(m_interrupt_status));
+	save_item(NAME(m_tx_int_enabled));
 	save_item(NAME(m_rx_handshake));
 	save_item(NAME(m_tx_handshake));
+	save_item(NAME(m_call_indicator));
+	save_item(NAME(m_carrier_indicator));
 	save_item(NAME(m_frame_counter));
 	save_item(NAME(m_vblank_state));
 	save_item(NAME(m_attribute));
@@ -178,6 +180,11 @@ void tandberg_tdv2100_disp_logic_device::device_reset()
 	m_data_terminal_ready = false;
 	m_request_to_send = false;
 	m_data_pending_kbd = false;
+
+	m_write_vsync_int_cb(1);
+	m_write_general_int_cb(1);
+	set_tx_int_enable(false);
+	m_data_pending_kbd = 0;
 
 	m_uart->write_xr(1);
 	m_uart->write_xr(0);
@@ -466,9 +473,9 @@ void tandberg_tdv2100_disp_logic_device::vblank(int state)
 {
 	if(state && !m_vblank_state)
 	{
-		// TODO: VSync interrupt for CPU interface
 		m_frame_counter++;
 		m_screen->update_now();
+		m_write_vsync_int_cb(0);
 	}
 	m_vblank_state = state;
 }
@@ -646,6 +653,130 @@ uint32_t tandberg_tdv2100_disp_logic_device::screen_update(screen_device &screen
 
 ///////////////////////////////////////////////////////////////////////////////
 //
+// CPU interface
+//
+
+void tandberg_tdv2100_disp_logic_device::transmit_cpu_data(uint8_t data)
+{
+	m_uart->transmit(data);
+}
+
+void tandberg_tdv2100_disp_logic_device::process_cpu_char(uint8_t data)
+{
+	char_to_display(data);
+}
+
+void tandberg_tdv2100_disp_logic_device::process_cpu_data(uint8_t data)
+{
+	data_to_display(data);
+}
+
+void tandberg_tdv2100_disp_logic_device::handle_cpu_command(uint8_t data)
+{
+	if(data&0x01)
+	{
+		clock_on_line_flip_flop(true);
+	}
+	if(data&0x02)
+	{
+		clock_transmit_flip_flop();
+	}
+	if(data&0x04)
+	{
+		clear_key_handler();
+	}
+	if(data&0x08)
+	{
+		set_tx_int_enable(!m_tx_int_enabled);
+	}
+}
+
+uint8_t tandberg_tdv2100_disp_logic_device::get_received_data()
+{
+	uint8_t data = m_uart->receive();
+	m_uart->write_rdav(0);
+	return data;
+}
+
+uint8_t tandberg_tdv2100_disp_logic_device::get_char_data()
+{
+	uint8_t data = m_vram[get_ram_addr(m_cursor_row, m_cursor_col)];
+	advance_cursor();
+	return data;
+}
+
+uint8_t tandberg_tdv2100_disp_logic_device::get_keyboard_data()
+{
+	uint8_t data = m_data_kbd;
+	m_data_pending_kbd = false;
+	update_interrupt_reg(0x04, m_data_pending_kbd);
+	return data;
+}
+
+uint8_t tandberg_tdv2100_disp_logic_device::get_terminal_status()
+{
+	uint8_t terminal_status = 0xc0;
+	terminal_status |= (!m_data_terminal_ready)? 0x01 : 0x00;
+	terminal_status |= (!m_rx_handshake)? 0x02 : 0x00;
+	terminal_status |= (!m_request_to_send)? 0x04 : 0x00;
+	terminal_status |= (!m_tx_handshake)? 0x08 : 0x00;
+	terminal_status |= (!m_carrier_indicator)? 0x10 : 0x00;
+	terminal_status |= (!m_call_indicator)? 0x20 : 0x00;
+	return terminal_status;
+}
+
+uint8_t tandberg_tdv2100_disp_logic_device::get_interrupt_status()
+{
+	return m_interrupt_status;
+}
+
+uint8_t tandberg_tdv2100_disp_logic_device::get_uart_status()
+{
+	uint8_t uart_status = 0xc0;
+	uart_status |= (m_uart->tbmt_r())? 0x01 : 0x00;
+	uart_status |= (m_uart->dav_r())? 0x02 : 0x00;
+	uart_status |= (m_tx_int_enabled)? 0x04 : 0x00;
+	uart_status |= (m_uart->pe_r())? 0x08 : 0x00;
+	uart_status |= (m_uart->or_r())? 0x10 : 0x00;
+	uart_status |= (m_uart->fe_r())? 0x20 : 0x00;
+	return uart_status;
+}
+
+// Note: This will deliberately only trigger an interrupt if no previous int
+//       trigger-condition is present. It's the responsibility of the kernel
+//       software to resolve ALL terminal-related interrupt sources when this
+//       interrupt triggers, otherwise any future terminal-status interrupts
+//       will be blocked.
+void tandberg_tdv2100_disp_logic_device::update_interrupt_reg(uint8_t mask, uint8_t state)
+{
+	bool arm_int = (!m_interrupt_status);
+	m_interrupt_status = (m_interrupt_status & ~(mask))|((state)? mask : 0x00);
+	if(arm_int && m_interrupt_status)
+	{
+		m_write_general_int_cb(0);
+	}
+}
+
+void tandberg_tdv2100_disp_logic_device::ack_general_int_w(uint8_t state)
+{
+	// Note: Negative active strobe
+	if(!state)
+	{
+		m_write_general_int_cb(1);
+	}
+}
+
+void tandberg_tdv2100_disp_logic_device::ack_vsync_int_w(uint8_t state)
+{
+	// Note: Negative active strobe
+	if(!state)
+	{
+		m_write_vsync_int_cb(1);
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
+//
 // UART
 //
 
@@ -691,6 +822,7 @@ void tandberg_tdv2100_disp_logic_device::rs232_txd_w(int state)
 
 void tandberg_tdv2100_disp_logic_device::rs232_dcd_w(int state)
 {
+	m_carrier_indicator = state;
 	m_write_carl_cb(state);
 
 	bool dcd_handshake = ((m_dsw_u39->read() & 0x00c) == 0x008);
@@ -744,7 +876,8 @@ void tandberg_tdv2100_disp_logic_device::update_all_rs232_signal_paths()
 
 void tandberg_tdv2100_disp_logic_device::rs232_ri_w(int state)
 {
-	// TODO: Ring Indicator interrupt for CPU interface
+	m_call_indicator = state;
+	update_interrupt_reg(0x20, !state);
 }
 
 void tandberg_tdv2100_disp_logic_device::check_rs232_rx_error(int state)
@@ -754,39 +887,37 @@ void tandberg_tdv2100_disp_logic_device::check_rs232_rx_error(int state)
 
 void tandberg_tdv2100_disp_logic_device::uart_rx(int state)
 {
-	if(state)
+	bool tty_mode = BIT(m_dsw_u39->read(), 4);
+	if(state && tty_mode)
 	{
-		bool tty_mode = BIT(m_dsw_u39->read(), 4);
-		if(tty_mode)
-		{
-			char_to_display(m_uart->receive());
-			m_uart->write_rdav(0);
-		}
-		else
-		{
-			// TODO: Rx interrupt for CPU interface
-		}
+		char_to_display(m_uart->receive());
+		m_uart->write_rdav(0);
 	}
+	update_interrupt_reg(0x02, state);
 }
 
 void tandberg_tdv2100_disp_logic_device::uart_tx(int state)
 {
-	if(state)
+	bool tty_mode = BIT(m_dsw_u39->read(), 4);
+	if(state && tty_mode)
 	{
-		bool tty_mode = BIT(m_dsw_u39->read(), 4);
-		if(tty_mode)
+		if(m_data_pending_kbd)
 		{
-			if(m_data_pending_kbd)
-			{
-				m_uart->transmit(m_data_kbd);
-				m_data_pending_kbd = false;
-			}
-		}
-		else
-		{
-			// TODO: Tx interrupt for CPU interface
+			m_uart->transmit(m_data_kbd);
+			m_data_pending_kbd = false;
+			update_interrupt_reg(0x04, m_data_pending_kbd);
 		}
 	}
+	if(m_tx_int_enabled)
+	{
+		update_interrupt_reg(0x01, m_uart->tbmt_r());
+	}
+}
+
+void tandberg_tdv2100_disp_logic_device::set_tx_int_enable(bool state)
+{
+	m_tx_int_enabled = state;
+	update_interrupt_reg(0x01, (state)? m_uart->tbmt_r() : 0);
 }
 
 INPUT_CHANGED_MEMBER(tandberg_tdv2100_disp_logic_device::uart_changed)
@@ -811,7 +942,7 @@ void tandberg_tdv2100_disp_logic_device::set_uart_state_from_switches()
 }
 
 // Resolves Rx flow-control logic
-void tandberg_tdv2100_disp_logic_device::clock_on_line_flip_flop()
+void tandberg_tdv2100_disp_logic_device::clock_on_line_flip_flop(bool cpu_source)
 {
 	bool force_on_line = !BIT(m_dsw_u39->read(), 5);
 	if(force_on_line)
@@ -841,10 +972,13 @@ void tandberg_tdv2100_disp_logic_device::clock_on_line_flip_flop()
 	update_all_rs232_signal_paths();
 	update_rs232_lamps();
 
-	bool hold_line_key_for_rts = ((m_dsw_u73->read() & 0x3) == 0x2);
-	if(hold_line_key_for_rts && m_data_terminal_ready && m_line_key_held && !m_trans_key_held)
+	if(!cpu_source)
 	{
-		clock_transmit_flip_flop();
+		bool hold_line_key_for_rts = ((m_dsw_u73->read() & 0x3) == 0x2);
+		if(hold_line_key_for_rts && m_data_terminal_ready && m_line_key_held && !m_trans_key_held)
+		{
+			clock_transmit_flip_flop();
+		}
 	}
 }
 
@@ -905,11 +1039,8 @@ void tandberg_tdv2100_disp_logic_device::process_keyboard_char(uint8_t key)
 		{
 			uart_tx(1);
 		}
-		else
-		{
-			// TODO: Keyboard interrupt for CPU interface
-		}
 	}
+	update_interrupt_reg(0x04, m_data_pending_kbd);
 }
 
 void tandberg_tdv2100_disp_logic_device::break_w(int state)
