@@ -51,8 +51,9 @@ tandberg_tdv2100_cpu_device::tandberg_tdv2100_cpu_device(const machine_config &m
 	device_t(mconfig, type, tag, owner, clock),
 	m_cpu(*this, "processor"),
 	m_rom(*this, "kernel_rom"),
-	m_ram(*this, RAM_TAG),
 	m_cpu_mem_view(*this, "mem_view"),
+	m_exp_bus(*this, "exp_bus"),
+	m_slot3(*this, "slot3"),
 	m_uart(*this, "uart"),
 	m_uart_clock(*this, "uart_clock"),
 	m_rs232(*this, "serial"),
@@ -95,9 +96,10 @@ void tandberg_tdv2100_cpu_device::device_reset()
 
 void tandberg_tdv2100_cpu_device::tdv2100_mem(address_map &map)
 {
+	map.unmap_value_high();
 	map(0x0000, 0x27ff).view(m_cpu_mem_view);
 	m_cpu_mem_view[0](0x0000, 0x1fff).rom().region("kernel_rom", 0);
-	m_cpu_mem_view[0](0x2000, 0x27ff).rw(m_ram, FUNC(ram_device::read), FUNC(ram_device::write));
+	m_cpu_mem_view[0](0x2000, 0x27ff).ram();
 }
 
 void tandberg_tdv2100_cpu_device::tdv2100_io(address_map &map)
@@ -329,8 +331,6 @@ void tandberg_tdv2100_cpu_device::device_add_mconfig(machine_config &mconfig)
 	m_cpu->set_addrmap(AS_PROGRAM, &tandberg_tdv2100_cpu_device::tdv2100_mem);
 	m_cpu->set_addrmap(AS_IO, &tandberg_tdv2100_cpu_device::tdv2100_io);
 
-	RAM(mconfig, m_ram).set_default_size("2K").set_default_value(0xff);
-
 	RS232_PORT(mconfig, m_rs232, default_rs232_devices, nullptr);
 	m_rs232->rxd_handler().set(m_uart, FUNC(ay51013_device::write_si));
 
@@ -341,6 +341,10 @@ void tandberg_tdv2100_cpu_device::device_add_mconfig(machine_config &mconfig)
 	// NOTE: Frequency set with the rest of the UART settings
 	m_uart_clock->signal_handler().set(m_uart, FUNC(ay51013_device::write_rcp));
 	m_uart_clock->signal_handler().append(m_uart, FUNC(ay51013_device::write_tcp));
+
+	TANDBERG_TDV2100_BUS(mconfig, m_exp_bus, 0);
+	TANDBERG_TDV2100_BUS_SLOT(mconfig, m_slot3, 0, "exp_bus", tdv_2100_cards, nullptr, false);
+	m_exp_bus->set_memspace(m_cpu, AS_PROGRAM);
 }
 
 static INPUT_PORTS_START( tdv2114 )
