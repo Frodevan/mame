@@ -2,19 +2,20 @@
 // copyright-holders:Frode van der Meeren
 /***************************************************************************
 
-	Tandberg TDV-2114/24 Computer
+    Tandberg TDV-2114/24 Computer
 
-	This driver uses the TDV-2100 series Display Logic module together with
-	a CPU, memory and a floppy disk drive controller module. This is the
-	computers of the TDV-2100 series.
+    This driver uses the TDV-2100 series Display Logic module together with
+    a CPU, memory and a floppy disk drive controller module. This is the
+    computers of the TDV-2100 series.
 
-	More optional modules exist, such as a QIC tape interface, different
-	configurations of RAM/ROM, cluster interface, as well as loadable
-	characters (char 0-32).
+    More optional modules exist, such as a QIC tape interface, different
+    configurations of RAM/ROM, cluster interface, as well as loadable
+    characters (char 0-32).
 
 ****************************************************************************/
 
 #include "emu.h"
+#include "bus/tandberg/tdv2100.h"
 
 #include "tdv2100_disp_logic.h"
 #include "tdv2100_kbd.h"
@@ -29,7 +30,9 @@ public:
 		driver_device(mconfig, type, tag),
 		m_terminal(*this, "terminal"),
 		m_keyboard(*this, "keyboard"),
-		m_cpu(*this, "processor")
+		m_cpu(*this, "processor"),
+		m_exp_bus(*this, "exp_bus"),
+		m_slot3(*this, "slot3")
 	{}
 
 	void tdv2114(machine_config &config);
@@ -39,10 +42,15 @@ private:
 	required_device<tandberg_tdv2100_disp_logic_device> m_terminal;
 	required_device<tandberg_tdv2100_keyboard_device> m_keyboard;
 	required_device<tandberg_tdv2100_cpu_device> m_cpu;
+	required_device<tandberg_tdv2100_bus_device> m_exp_bus;
+	required_device<tandberg_tdv2100_bus_slot_device> m_slot3;
 };
 
 void tdv2114_state::tdv2114(machine_config& config)
 {
+	TANDBERG_TDV2100_BUS(config, m_exp_bus, 0);
+	TANDBERG_TDV2100_BUS_SLOT(config, m_slot3, 0, "exp_bus", tdv_2100_cards, nullptr, false);
+	
 	TANDBERG_TDV2114_DISPLAY_LOGIC(config, m_terminal);
 	m_terminal->write_waitl_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::waitl_w));
 	m_terminal->write_onlil_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::onlil_w));
@@ -78,6 +86,9 @@ void tdv2114_state::tdv2114(machine_config& config)
 
 void tdv2114_state::tdv2124(machine_config& config)
 {
+	TANDBERG_TDV2100_BUS(config, m_exp_bus, 0);
+	TANDBERG_TDV2100_BUS_SLOT(config, m_slot3, 0, "exp_bus", tdv_2100_cards, nullptr, false);
+
 	TANDBERG_TDV2114_DISPLAY_LOGIC(config, m_terminal);
 	m_terminal->write_waitl_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::waitl_w));
 	m_terminal->write_onlil_callback().set(m_keyboard, FUNC(tandberg_tdv2100_keyboard_device::onlil_w));
