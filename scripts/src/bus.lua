@@ -4783,6 +4783,20 @@ end
 
 ---------------------------------------------------
 --
+--@src/devices/bus/tandberg/tdv2100.h,BUSES["TDV2100"] = true
+---------------------------------------------------
+
+if (BUSES["TDV2100"]~=null) then
+	files {
+		MAME_DIR .. "src/devices/bus/tandberg/tdv2100.cpp",
+		MAME_DIR .. "src/devices/bus/tandberg/tdv2100.h",
+		MAME_DIR .. "src/devices/bus/tandberg/tdv2100_cards.cpp",
+		MAME_DIR .. "src/devices/bus/tandberg/tdv2100_cards.h",
+	}
+end
+
+---------------------------------------------------
+--
 --@src/devices/bus/qbus/qbus.h,BUSES["QBUS"] = true
 ---------------------------------------------------
 
