@@ -4792,6 +4792,10 @@ if (BUSES["TDV2100"]~=null) then
 		MAME_DIR .. "src/devices/bus/tandberg/tdv2100.h",
 		MAME_DIR .. "src/devices/bus/tandberg/tdv2100_cards.cpp",
 		MAME_DIR .. "src/devices/bus/tandberg/tdv2100_cards.h",
+		MAME_DIR .. "src/devices/bus/tandberg/tdv2100_dram.cpp",
+		MAME_DIR .. "src/devices/bus/tandberg/tdv2100_dram.h",
+		MAME_DIR .. "src/devices/bus/tandberg/tdv2100_sram.cpp",
+		MAME_DIR .. "src/devices/bus/tandberg/tdv2100_sram.h",
 	}
 end
 

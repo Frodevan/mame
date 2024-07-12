@@ -75,6 +75,7 @@ void tandberg_tdv2100_bus_device::device_start()
 {
 }
 
+
 void tandberg_tdv2100_bus_device::device_reset()
 {
 }
