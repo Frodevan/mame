@@ -41,6 +41,7 @@
 #include "tdv2100_disp_logic.h"
 
 static constexpr XTAL CPU_CLOCK = DOT_CLOCK/10;
+static constexpr XTAL UART_CLOCK = DOT_CLOCK/66;
 
 DEFINE_DEVICE_TYPE(TANDBERG_TDV2114_CPU, tandberg_tdv2114_cpu_device, "tandberg_tdv2114_cpu", "Tandberg TDV-2100 series CPU card with XMON/D rev.5 ROM");
 DEFINE_DEVICE_TYPE(TANDBERG_TDV2124_CPU, tandberg_tdv2124_cpu_device, "tandberg_tdv2124_cpu", "Tandberg TDV-2100 series CPU card with XMON/F rev.3 ROM");
@@ -54,6 +55,8 @@ tandberg_tdv2100_cpu_device::tandberg_tdv2100_cpu_device(const machine_config &m
 	m_uart(*this, "uart"),
 	m_uart_clock(*this, "uart_clock"),
 	m_rs232(*this, "serial"),
+	m_dsw_u54(*this, "dsw_u54"),
+	m_sw_board_revision(*this, "sw_board_revision"),
 	m_write_iack_1_cb(*this),
 	m_write_iack_3_cb(*this),
 	m_write_io_port_e4_cb(*this),
@@ -91,20 +94,15 @@ void tandberg_tdv2100_cpu_device::device_reset()
 
 void tandberg_tdv2100_cpu_device::tdv2100_mem(address_map &map)
 {
-	map(0x0000, 0x2fff).view(m_cpu_mem_view);
+	map(0x0000, 0x27ff).view(m_cpu_mem_view);
 	m_cpu_mem_view[0](0x0000, 0x1fff).rom().region("kernel_rom", 0);
 	m_cpu_mem_view[0](0x2000, 0x27ff).rw(m_ram, FUNC(ram_device::read), FUNC(ram_device::write));
-	// TODO: 0x2800-0x2fff goes to optional redefinable character expansion for terminal module
-	// TODO: Map expansion bus
-	//     m_cpu_mem_view[0](0x3000, 0xffff).rw(m_exp, FUNC(ram_device::read), FUNC(ram_device::write));
-	//     m_cpu_mem_view[1](0x0000, 0xffff).rw(m_exp, FUNC(ram_device::read), FUNC(ram_device::write));
 }
 
 void tandberg_tdv2100_cpu_device::tdv2100_io(address_map &map)
 {
 	map.unmap_value_high();
 	map(0x00, 0xff).rw(FUNC(tandberg_tdv2100_cpu_device::io_r), FUNC(tandberg_tdv2100_cpu_device::io_w));
-	// TODO: Map expansion bus
 }
 
 uint8_t tandberg_tdv2100_cpu_device::io_r(offs_t addr)
@@ -124,12 +122,10 @@ uint8_t tandberg_tdv2100_cpu_device::io_r(offs_t addr)
 			return m_read_io_port_e7();
 
 		case 0xf4:
-			// Todo: CPU module UART
-			return 0xff;
+			return read_uart_data();
 
 		case 0xf5:
-			// Todo: CPU module UART
-			return 0xff;
+			return read_uart_status();
 
 		case 0xf6:
 			return m_read_io_port_f6();
@@ -164,7 +160,7 @@ void tandberg_tdv2100_cpu_device::io_w(offs_t addr, uint8_t data)
 			return;
 
 		case 0xf4:
-			// Todo: CPU module UART
+			write_uart_data(data);
 			return;
 
 		case 0xf5:
@@ -172,14 +168,16 @@ void tandberg_tdv2100_cpu_device::io_w(offs_t addr, uint8_t data)
 			return; // Note: Reserved for bodge-wire patches
 
 		case 0xf7:
-			// TODO: If CP/M patch installed
-			//     m_cpu_mem_view.select(1);
+			if(BIT(m_sw_board_revision->read(), 1))
+			{
+				// CP/M compatibility mod adds a flipflop to unmap onboard memory
+				m_cpu_mem_view.select(1);
+			}
 			return;
 
 		default:
 			break;
 	}
-	// Todo: Invoke io on expansion bus
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -262,7 +260,7 @@ IRQ_CALLBACK_MEMBER( tandberg_tdv2100_cpu_device::inta_cb )
 
 ///////////////////////////////////////////////////////////////////////////////
 //
-// Printer port (RS-232)
+// Printer port (Current Loop UART)
 //
 
 INPUT_CHANGED_MEMBER(tandberg_tdv2100_cpu_device::uart_changed)
@@ -272,7 +270,50 @@ INPUT_CHANGED_MEMBER(tandberg_tdv2100_cpu_device::uart_changed)
 
 void tandberg_tdv2100_cpu_device::set_uart_state_from_switches()
 {
-	
+	int uart_settings = m_dsw_u54->read();
+	int u52_u53_divisor = (BIT(uart_settings, 9)) ? 174 : ((uart_settings&0x0fc)>>2)|((uart_settings&0x100)>>1);
+	m_uart_clock->set_unscaled_clock(UART_CLOCK / u52_u53_divisor);
+
+	m_uart->write_cs(true);
+	m_uart->write_nb1(!BIT(uart_settings, 0));
+	m_uart->write_nb2(true);
+	m_uart->write_np(!BIT(uart_settings, 1));
+	m_uart->write_eps(true);
+	m_uart->write_tsb(true);
+}
+
+uint8_t tandberg_tdv2100_cpu_device::read_uart_data()
+{
+	uint8_t data = m_uart->receive();
+	m_uart->write_rdav(0);
+	return adjust_uart_read_for_board_rev(data);
+}
+
+void tandberg_tdv2100_cpu_device::write_uart_data(uint8_t data)
+{
+	m_uart->transmit(data);
+}
+
+uint8_t tandberg_tdv2100_cpu_device::read_uart_status()
+{
+	uint8_t uart_status = 0xc4;
+	uart_status |= (m_uart->tbmt_r())? 0x01 : 0x00;
+	uart_status |= (m_uart->dav_r())? 0x02 : 0x00;
+	uart_status |= (m_uart->pe_r())? 0x08 : 0x00;
+	uart_status |= (m_uart->or_r())? 0x10 : 0x00;
+	uart_status |= (m_uart->fe_r())? 0x20 : 0x00;
+	return adjust_uart_read_for_board_rev(uart_status);
+}
+
+uint8_t tandberg_tdv2100_cpu_device::adjust_uart_read_for_board_rev(uint8_t data)
+{
+	if(BIT(m_sw_board_revision->read(), 0))
+	{
+		// From board rev 4-13, SI is always put direcrly in bit7 for all reads from UART
+		data &= !0x80;
+		data |= (m_rs232->rxd_r())? 0x80 : 0x00;
+	}
+	return data;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -283,25 +324,17 @@ void tandberg_tdv2100_cpu_device::set_uart_state_from_switches()
 void tandberg_tdv2100_cpu_device::device_add_mconfig(machine_config &mconfig)
 {
 	I8080(mconfig, m_cpu, CPU_CLOCK);
+	m_cpu->set_irq_acknowledge_callback(FUNC(tandberg_tdv2100_cpu_device::inta_cb));
 	m_cpu->set_addrmap(AS_PROGRAM, &tandberg_tdv2100_cpu_device::tdv2100_mem);
 	m_cpu->set_addrmap(AS_IO, &tandberg_tdv2100_cpu_device::tdv2100_io);
-	m_cpu->set_irq_acknowledge_callback(FUNC(tandberg_tdv2100_cpu_device::inta_cb));
 
 	RAM(mconfig, m_ram).set_default_size("2K").set_default_value(0xff);
 
 	RS232_PORT(mconfig, m_rs232, default_rs232_devices, nullptr);
-	//m_rs232->rxd_handler().set(FUNC(tandberg_tdv2100_disp_logic_device::rs232_rxd_w));
-	//m_rs232->dcd_handler().set(FUNC(tandberg_tdv2100_disp_logic_device::rs232_dcd_w));
-	//m_rs232->dsr_handler().set(FUNC(tandberg_tdv2100_disp_logic_device::rs232_dsr_w));
-	//m_rs232->cts_handler().set(FUNC(tandberg_tdv2100_disp_logic_device::rs232_cts_w));
-	//m_rs232->ri_handler().set(FUNC(tandberg_tdv2100_disp_logic_device::rs232_ri_w));
+	m_rs232->rxd_handler().set(m_uart, FUNC(ay51013_device::write_si));
 
 	AY51013(mconfig, m_uart);
-	//m_uart->write_so_callback().set(FUNC(tandberg_tdv2100_disp_logic_device::rs232_txd_w));
-	//m_uart->write_dav_callback().set(FUNC(tandberg_tdv2100_disp_logic_device::uart_rx));
-	//m_uart->write_dav_callback().append(FUNC(tandberg_tdv2100_disp_logic_device::check_rs232_rx_error));
-	//m_uart->write_tbmt_callback().set(FUNC(tandberg_tdv2100_disp_logic_device::uart_tx));
-	//m_uart->write_pe_callback().set(FUNC(tandberg_tdv2100_disp_logic_device::check_rs232_rx_error));
+	m_uart->write_so_callback().set(m_rs232, FUNC(rs232_port_device::write_txd));
 
 	CLOCK(mconfig, m_uart_clock, 1);
 	// NOTE: Frequency set with the rest of the UART settings
@@ -311,16 +344,31 @@ void tandberg_tdv2100_cpu_device::device_add_mconfig(machine_config &mconfig)
 
 static INPUT_PORTS_START( tdv2114 )
 
-	PORT_START("sw_rs232_baud")
-		PORT_CONFNAME(0x7, 0x6, "SPEED SELECT [Note: Baud-rate]")                                PORT_CHANGED_MEMBER(DEVICE_SELF, tandberg_tdv2100_cpu_device, uart_changed, 0)
-			PORT_CONFSETTING(0x0, "0: 110")
-			PORT_CONFSETTING(0x1, "1: 300")
-			PORT_CONFSETTING(0x2, "2: 600")
-			PORT_CONFSETTING(0x3, "3: 1200")
-			PORT_CONFSETTING(0x4, "4: 2400")
-			PORT_CONFSETTING(0x5, "5: 4800")
-			PORT_CONFSETTING(0x6, "6: 9600")
-			PORT_CONFSETTING(0x7, "7: 19200")
+	PORT_START("sw_board_revision")
+		PORT_CONFNAME(0x1, 0x1, "Printer port bit7 read behaviour")
+			PORT_CONFSETTING(0x0, "Bit7 of Rx byte (Early revision board)")    // 1977-02-28 revision.
+			PORT_CONFSETTING(0x1, "State of RxD line (Later revision board)")  // 1979-06-20 revision.
+		PORT_CONFNAME(0x2, 0x0, "CP/M compatibility mod")
+			PORT_CONFSETTING(0x0, DEF_STR( No ))
+			PORT_CONFSETTING(0x2, DEF_STR( Yes ))   // Adds a writeable flipflop to swap onboard memory with external RAM
+
+	PORT_START("dsw_u54")
+		PORT_DIPNAME(0x001, 0x000, "Printer port Data")                 PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_cpu_device::uart_changed), 0)
+			PORT_DIPSETTING(0x000, "8 bits")
+			PORT_DIPSETTING(0x001, "7 bits")
+		PORT_DIPNAME(0x002, 0x000, "Printer port Parity (Even)")        PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_cpu_device::uart_changed), 0)
+			PORT_DIPSETTING(0x000, DEF_STR( Off ))
+			PORT_DIPSETTING(0x002, DEF_STR( On ))
+		PORT_DIPNAME(0x3fc, 0x204, "Printer port Baud-rate")            PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(tandberg_tdv2100_cpu_device::uart_changed), 0)
+			PORT_DIPSETTING(0x000, "0 (Disabled)")
+			PORT_DIPSETTING(0x300, "75")
+			PORT_DIPSETTING(0x100, "110")
+			PORT_DIPSETTING(0x280, "300")
+			PORT_DIPSETTING(0x240, "600")
+			PORT_DIPSETTING(0x220, "1200")
+			PORT_DIPSETTING(0x210, "2400")
+			PORT_DIPSETTING(0x208, "4800")
+			PORT_DIPSETTING(0x204, "9600")
 
 INPUT_PORTS_END
 
