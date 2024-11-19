@@ -57,14 +57,20 @@ private:
 	uint8_t io_r(offs_t addr);
 	void io_w(offs_t addr, uint8_t data);
 	void set_uart_state_from_switches();
+	uint8_t read_uart_data();
+	uint8_t read_uart_status();
+	void write_uart_data(uint8_t data);
+	uint8_t adjust_uart_read_for_board_rev(uint8_t data);
 
-	required_device<cpu_device>             m_cpu;
-	required_region_ptr<uint8_t>            m_rom;
-	required_device<ram_device>             m_ram;
-	memory_view                             m_cpu_mem_view;
-	required_device<ay51013_device>         m_uart;
-	required_device<clock_device>           m_uart_clock;
-	required_device<rs232_port_device>      m_rs232;
+	required_device<cpu_device>         m_cpu;
+	required_region_ptr<uint8_t>        m_rom;
+	required_device<ram_device>         m_ram;
+	memory_view                         m_cpu_mem_view;
+	required_device<ay51013_device>     m_uart;
+	required_device<clock_device>       m_uart_clock;
+	required_device<rs232_port_device>  m_rs232;
+	required_ioport                     m_dsw_u54;
+	required_ioport                     m_sw_board_revision;
 
 	devcb_write_line                    m_write_iack_1_cb;
 	devcb_write_line                    m_write_iack_3_cb;
