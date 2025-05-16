@@ -90,26 +90,36 @@ private:
 	uint8_t m_ireq_state;
 };
 
-class tandberg_tdv2114_cpu_device : public tandberg_tdv2100_cpu_device
+class tandberg_tdv2114_5_cpu_device : public tandberg_tdv2100_cpu_device
 {
 	public:
-		tandberg_tdv2114_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+		tandberg_tdv2114_5_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
 
 	protected:
 		virtual const tiny_rom_entry *device_rom_region() const override;
 };
 
-class tandberg_tdv2124_cpu_device : public tandberg_tdv2100_cpu_device
+class tandberg_tdv2124_2_cpu_device : public tandberg_tdv2100_cpu_device
 {
 	public:
-		tandberg_tdv2124_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+		tandberg_tdv2124_2_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+
+	protected:
+		virtual const tiny_rom_entry *device_rom_region() const override;
+};
+
+class tandberg_tdv2124_3_cpu_device : public tandberg_tdv2100_cpu_device
+{
+	public:
+		tandberg_tdv2124_3_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
 
 	protected:
 		virtual const tiny_rom_entry *device_rom_region() const override;
 };
 
 // device type definition
-DECLARE_DEVICE_TYPE(TANDBERG_TDV2114_CPU, tandberg_tdv2114_cpu_device)
-DECLARE_DEVICE_TYPE(TANDBERG_TDV2124_CPU, tandberg_tdv2124_cpu_device)
+DECLARE_DEVICE_TYPE(TANDBERG_TDV2114_5_CPU, tandberg_tdv2114_5_cpu_device)
+DECLARE_DEVICE_TYPE(TANDBERG_TDV2124_2_CPU, tandberg_tdv2124_2_cpu_device)
+DECLARE_DEVICE_TYPE(TANDBERG_TDV2124_3_CPU, tandberg_tdv2124_3_cpu_device)
 
 #endif // MAME_TANDBERG_TDV2100_CPU_H
