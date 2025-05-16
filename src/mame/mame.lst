@@ -45293,8 +45293,9 @@ wyvernf0
 wyvernf0a
 
 @source:tandberg/tdv2114.cpp
-tdv2114                         //
-tdv2124                         //
+tdv2114_5                       //
+tdv2124_2                       //
+tdv2124_3                       //
 
 @source:tandberg/tdv2115l.cpp
 tdv2115l

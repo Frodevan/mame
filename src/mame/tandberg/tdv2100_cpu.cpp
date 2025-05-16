@@ -43,8 +43,9 @@
 static constexpr XTAL CPU_CLOCK = DOT_CLOCK/10;
 static constexpr XTAL UART_CLOCK = DOT_CLOCK/66;
 
-DEFINE_DEVICE_TYPE(TANDBERG_TDV2114_CPU, tandberg_tdv2114_cpu_device, "tandberg_tdv2114_cpu", "Tandberg TDV-2100 series CPU card with XMON/D rev.5 ROM");
-DEFINE_DEVICE_TYPE(TANDBERG_TDV2124_CPU, tandberg_tdv2124_cpu_device, "tandberg_tdv2124_cpu", "Tandberg TDV-2100 series CPU card with XMON/F rev.3 ROM");
+DEFINE_DEVICE_TYPE(TANDBERG_TDV2114_5_CPU, tandberg_tdv2114_5_cpu_device, "tandberg_tdv2114_5_cpu", "Tandberg TDV-2100 series CPU card with XMON/CD rev.5 ROM");
+DEFINE_DEVICE_TYPE(TANDBERG_TDV2124_2_CPU, tandberg_tdv2124_2_cpu_device, "tandberg_tdv2124_2_cpu", "Tandberg TDV-2100 series CPU card with XMON/F rev.2 ROM");
+DEFINE_DEVICE_TYPE(TANDBERG_TDV2124_3_CPU, tandberg_tdv2124_3_cpu_device, "tandberg_tdv2124_3_cpu", "Tandberg TDV-2100 series CPU card with XMON/F rev.3 ROM");
 
 tandberg_tdv2100_cpu_device::tandberg_tdv2100_cpu_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock):
 	device_t(mconfig, type, tag, owner, clock),
@@ -372,7 +373,7 @@ static INPUT_PORTS_START( tdv2114 )
 
 INPUT_PORTS_END
 
-ROM_START(tdv2114)
+ROM_START(tdv2114_5)
 	ROM_REGION( 0x2000, "kernel_rom", ROMREGION_ERASEFF )
 	ROM_LOAD( "eprom.2708.u1", 0x0000, 0x0400, CRC(83856611) SHA1(09adb5a8ceeac676bdd7ce44dcbdcb01c66614a3))
 	ROM_LOAD( "eprom.2708.u2", 0x0400, 0x0400, CRC(e37d65c5) SHA1(a99e78ca5790ca1d19eab228efdafe5a4b51bf35))
@@ -382,7 +383,16 @@ ROM_START(tdv2114)
 	ROM_LOAD( "eprom.2708.u6", 0x1400, 0x0400, CRC(62d4e49a) SHA1(4d52d7763487f03baf0e0e28bae05285811c308e))
 ROM_END
 
-ROM_START(tdv2124)
+ROM_START(tdv2124_2)
+	ROM_REGION( 0x2000, "kernel_rom", ROMREGION_ERASEFF )
+	ROM_LOAD( "961045-2 1.2708.u1", 0x0000, 0x0400, CRC(cff003de) SHA1(739e8f4f74be03cb96204d7ab3a004e71bc7fae9))
+	ROM_LOAD( "961045-2 2.2708.u2", 0x0400, 0x0400, CRC(4bba6fc3) SHA1(fc401571f358cc668affbf192e8deb85ee3ca0f9))
+	ROM_LOAD( "961045-2 3.2708.u3", 0x0800, 0x0400, CRC(93c36314) SHA1(213a52dec7383dfeed211093871204ca1f1ec343))
+	ROM_LOAD( "961045-2 4.2708.u4", 0x0C00, 0x0400, CRC(47573b64) SHA1(e6f325e74b0a152972d205966d2ab531f72cd628))
+	ROM_LOAD( "961045-2 5.2708.u5", 0x1000, 0x0400, CRC(eb66f148) SHA1(310b3b65ae4e269d1bef66621eea4008935e1bee))
+ROM_END
+
+ROM_START(tdv2124_3)
 	ROM_REGION( 0x2000, "kernel_rom", ROMREGION_ERASEFF )
 	ROM_LOAD( "961045-3 1.2708.u1", 0x0000, 0x0400, CRC(bf4c8343) SHA1(b6c65267f4d5e04cc1bb88758022f9728bf10339))
 	ROM_LOAD( "961045-3 2.2708.u2", 0x0400, 0x0400, CRC(ccd87858) SHA1(3b525891b770d95effa0b92d79fe9d9959676489))
@@ -396,20 +406,29 @@ ioport_constructor tandberg_tdv2100_cpu_device::device_input_ports() const
 	return INPUT_PORTS_NAME(tdv2114);
 }
 
-tandberg_tdv2114_cpu_device::tandberg_tdv2114_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock):
-	tandberg_tdv2100_cpu_device(mconfig, TANDBERG_TDV2114_CPU, tag, owner, clock)
+tandberg_tdv2114_5_cpu_device::tandberg_tdv2114_5_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock):
+	tandberg_tdv2100_cpu_device(mconfig, TANDBERG_TDV2114_5_CPU, tag, owner, clock)
 {}
 
-const tiny_rom_entry *tandberg_tdv2114_cpu_device::device_rom_region() const
+const tiny_rom_entry *tandberg_tdv2114_5_cpu_device::device_rom_region() const
 {
-	return ROM_NAME(tdv2114);
+	return ROM_NAME(tdv2114_5);
 }
 
-tandberg_tdv2124_cpu_device::tandberg_tdv2124_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock):
-	tandberg_tdv2100_cpu_device(mconfig, TANDBERG_TDV2124_CPU, tag, owner, clock)
+tandberg_tdv2124_2_cpu_device::tandberg_tdv2124_2_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock):
+	tandberg_tdv2100_cpu_device(mconfig, TANDBERG_TDV2124_2_CPU, tag, owner, clock)
 {}
 
-const tiny_rom_entry *tandberg_tdv2124_cpu_device::device_rom_region() const
+const tiny_rom_entry *tandberg_tdv2124_2_cpu_device::device_rom_region() const
 {
-	return ROM_NAME(tdv2124);
+	return ROM_NAME(tdv2124_2);
+}
+
+tandberg_tdv2124_3_cpu_device::tandberg_tdv2124_3_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock):
+	tandberg_tdv2100_cpu_device(mconfig, TANDBERG_TDV2124_3_CPU, tag, owner, clock)
+{}
+
+const tiny_rom_entry *tandberg_tdv2124_3_cpu_device::device_rom_region() const
+{
+	return ROM_NAME(tdv2124_3);
 }
